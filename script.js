@@ -8,7 +8,7 @@ const CONFIG = {
   MIN_SCALE: 2,
   MAX_SCALE: 16,
 
-  STORAGE_KEY: "niche-pixel-art-project-v2",
+  STORAGE_KEY: "-pixel-art-project-v2",
 
   PALETTE: [
     "#302A35",
@@ -755,9 +755,9 @@ function compileCSS() {
         box-shadow: ${firstShadows || "0 0 0 transparent"};
     }`;
 
-  return `/* Niche Sprite Sprout: generated CSS */
+  return `/*  Sprite Sprout: generated CSS */
 
-@keyframes nichePixelSprite {
+@keyframes PixelSprite {
 ${keyframes}
 }
 
@@ -768,7 +768,7 @@ ${keyframes}
     background: transparent;
 
     animation:
-        nichePixelSprite ${duration.toFixed(3)}s
+        PixelSprite ${duration.toFixed(3)}s
         steps(1)
         infinite;
 
@@ -810,7 +810,7 @@ function renderPreview() {
     previewSprite.style.animationName = "none";
 
     requestAnimationFrame(() => {
-      previewSprite.style.animationName = "nichePixelSprite";
+      previewSprite.style.animationName = "PixelSprite";
     });
   }
 }
@@ -945,7 +945,7 @@ function exportSpritesheet() {
 
 function getProjectData() {
   return {
-    format: "niche-pixel-art",
+    format: "-pixel-art",
     version: 2,
 
     name: state.projectName,
@@ -988,7 +988,7 @@ function importProject(file) {
     try {
       const data = JSON.parse(event.target.result);
 
-      if (data.format !== "niche-pixel-art") {
+      if (data.format !== "-pixel-art") {
         throw new Error("Invalid project format");
       }
 
@@ -1047,7 +1047,7 @@ function importProject(file) {
 
 function saveToLocalStorage() {
   const data = {
-    format: "niche-pixel-art",
+    format: "-pixel-art",
     version: 2,
 
     name: state.projectName,
@@ -1083,7 +1083,7 @@ function loadFromLocalStorage() {
 
     const data = JSON.parse(raw);
 
-    if (data.format !== "niche-pixel-art") {
+    if (data.format !== "-pixel-art") {
       return false;
     }
 
