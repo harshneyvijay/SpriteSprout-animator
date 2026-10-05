@@ -543,7 +543,7 @@ button:disabled {
 }
 
 .preview-sprite.playing {
-  animation-name: nichePixelSprite;
+  animation-name: PixelSprite;
   animation-timing-function: steps(1);
   animation-iteration-count: infinite;
 }
@@ -909,7 +909,7 @@ kbd {
 
 /* Generated animation placeholder*/
 
-@keyframes nichePixelSprite {
+@keyframes PixelSprite {
   0% {
     box-shadow: 0 0 0 transparent;
   }
