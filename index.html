@@ -3,44 +3,63 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SpriteSprout</title>
+
+    <title>Sprite Sprout — Spritesheet Animator</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Mystery+Quest&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Mystery+Quest&family=Nunito:wght@400;600;700;800;900&display=swap"
       rel="stylesheet"
     />
+
     <link rel="stylesheet" href="style.css" />
   </head>
 
   <body>
     <header class="app-header">
       <div class="brand">
-        <h1 class="brand-title">Sprite Sprout</h1>
-        <p class="brand-subtitle">
-          your friendly neighbourhood spritesheet playground :p
-        </p>
+        <div class="brand-mark">✦</div>
+
+        <div>
+          <h1 class="brand-title">Sprite Sprout</h1>
+          <p class="brand-subtitle">
+            Spritesheet Animator · CSS Compiler · Pixel Playground
+          </p>
+        </div>
       </div>
 
       <div class="header-actions">
-        <button id="undoBtn" class="icon-button" title="Undo: Ctrl+Z">↶</button>
-        <button id="redoBtn" class="icon-button" title="Redo: Ctrl+Y">↷</button>
-        <button id="saveBtn" class="soft">Autosaved</button>
+        <button id="undoBtn" class="icon-button" title="Undo — Ctrl + Z">
+          ↶
+        </button>
+
+        <button id="redoBtn" class="icon-button" title="Redo — Ctrl + Y">
+          ↷
+        </button>
+
+        <div class="save-status" id="saveStatus">
+          <span class="save-dot"></span>
+          <span>Autosaved</span>
+        </div>
       </div>
     </header>
 
     <main class="app">
-      <!-- TOOLBAR -->
+      <!-- =====================================================
+         TOOLBAR
+    ====================================================== -->
 
-      <section class="panel toolbar">
+      <section class="toolbar">
         <div class="toolbar-group">
-          <button id="paintBtn" class="tool-button active" title="Paint: P">
-            ✎ <span>Paint</span>
+          <button id="paintBtn" class="tool-button active" title="Paint — P">
+            <span class="tool-icon">✎</span>
+            <span>Paint</span>
           </button>
 
-          <button id="eraseBtn" class="tool-button" title="Eraser: E">
-            ◇ <span>Eraser</span>
+          <button id="eraseBtn" class="tool-button" title="Eraser — E">
+            <span class="tool-icon">◇</span>
+            <span>Eraser</span>
           </button>
 
           <div class="toolbar-divider"></div>
@@ -48,13 +67,15 @@
           <button
             id="onionBtn"
             class="tool-button"
-            title="Toggle onion skin: O"
+            title="Toggle onion skin — O"
           >
-            ◌ <span>Onion</span>
+            <span class="tool-icon">◌</span>
+            <span>Onion</span>
           </button>
 
           <button id="symmetryBtn" class="tool-button" title="Cycle symmetry">
-            ◈ <span>Symmetry: Off</span>
+            <span class="tool-icon">◈</span>
+            <span id="symmetryToolbarText">Symmetry: Off</span>
           </button>
 
           <div class="toolbar-divider"></div>
@@ -64,26 +85,29 @@
           <button id="clearAllBtn" class="danger">Clear All</button>
         </div>
 
-        <div class="toolbar-group">
-          <span class="tool-hint">
-            <kbd>P</kbd> paint <kbd>E</kbd> erase <kbd>Space</kbd> preview
+        <div class="toolbar-group toolbar-help">
+          <span>
+            <kbd>P</kbd> paint <kbd>E</kbd> erase <kbd>O</kbd> onion
+            <kbd>Space</kbd> preview
           </span>
         </div>
       </section>
 
-      <!-- MAIN WORKSPACE -->
+      <!-- =====================================================
+         MAIN WORKSPACE
+    ====================================================== -->
 
       <section class="workspace">
-        <!-- EDITOR -->
+        <!-- ===================================================
+           EDITOR
+      ==================================================== -->
 
         <section class="panel editor-panel">
           <div class="editor-top">
             <div>
               <div class="section-label">Editor</div>
 
-              <div class="section-title" style="margin: 2px 0 0">
-                <h2>Draw your sprite</h2>
-              </div>
+              <h2>Draw your sprite</h2>
 
               <div id="frameInfo" class="frame-info">Frame 1 / 1 · 8 × 8</div>
             </div>
@@ -97,7 +121,51 @@
             </div>
           </div>
 
+          <!-- ===============================================
+             BRUSH + SYMMETRY
+        ================================================ -->
+
+          <div class="editor-tools">
+            <div class="editor-tool-group">
+              <span class="tool-label"> Brush </span>
+
+              <div class="brush-controls">
+                <input
+                  id="colorPicker"
+                  class="color-picker"
+                  type="color"
+                  value="#302a35"
+                  title="Choose color"
+                />
+
+                <span id="currentColor" class="current-color"> #302A35 </span>
+
+                <div id="palette" class="palette"></div>
+              </div>
+            </div>
+
+            <div class="editor-tool-group symmetry-group">
+              <span class="tool-label"> Symmetry </span>
+
+              <div class="symmetry-controls">
+                <button id="symOffBtn" class="active">Off</button>
+
+                <button id="symHorizontalBtn">Horizontal</button>
+
+                <button id="symVerticalBtn">Vertical</button>
+
+                <button id="symBothBtn">Both</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===============================================
+             CANVAS
+        ================================================ -->
+
           <div class="canvas-area">
+            <div class="canvas-hint">Click or drag to paint</div>
+
             <div class="pixel-grid-wrap">
               <div
                 id="pixelGrid"
@@ -107,160 +175,117 @@
             </div>
           </div>
 
-          <div class="editor-bottom">
-            <!-- COLOR -->
+          <!-- ===============================================
+             TIMELINE DIRECTLY BELOW CANVAS
+        ================================================ -->
 
-            <div class="control-card">
-              <div class="control-card-title">Brush</div>
+          <div class="editor-timeline">
+            <div class="mini-timeline-head">
+              <div>
+                <span class="timeline-heading"> Frames </span>
 
-              <div class="control-row">
-                <input
-                  id="colorPicker"
-                  class="color-picker"
-                  type="color"
-                  value="#302a35"
-                />
-
-                <div
-                  id="currentColor"
-                  style="font-size: 0.8rem; font-weight: 800"
-                >
-                  #302A35
-                </div>
+                <span id="timelineFrameCount" class="timeline-count">
+                  1 frame
+                </span>
               </div>
 
-              <div class="control-card-title" style="margin-top: 14px">
-                Palette
-              </div>
+              <div class="timeline-actions">
+                <button id="addFrameBtn" class="primary">+ Blank</button>
 
-              <div id="palette" class="palette"></div>
+                <button id="duplicateFrameBtn">Duplicate</button>
+
+                <button id="moveLeftBtn" title="Move frame left">←</button>
+
+                <button id="moveRightBtn" title="Move frame right">→</button>
+
+                <button id="deleteFrameBtn" class="danger">Delete</button>
+              </div>
             </div>
 
-            <!-- SYMMETRY / GRID -->
-
-            <div class="control-card">
-              <div class="control-card-title">Symmetry</div>
-
-              <div class="control-row">
-                <button id="symOffBtn" class="active">Off</button>
-
-                <button id="symHorizontalBtn">Horizontal</button>
-
-                <button id="symVerticalBtn">Vertical</button>
-
-                <button id="symBothBtn">Both</button>
-              </div>
-
-              <div class="control-card-title" style="margin-top: 16px">
-                Recently used
-              </div>
-
-              <div id="recentPalette" class="palette"></div>
-            </div>
+            <div id="timeline" class="timeline"></div>
           </div>
         </section>
 
-        <!-- PREVIEW -->
+        <!-- ===================================================
+           PREVIEW
+      ==================================================== -->
 
         <section class="panel preview-panel">
           <div class="section-title">
             <div>
               <div class="section-label">Live Preview</div>
+
               <h2>See it move</h2>
             </div>
 
-            <button id="playBtn" class="primary">Pause</button>
+            <button id="playBtn" class="primary play-button">Pause</button>
           </div>
 
           <div class="preview-stage">
-            <div class="preview-sprite-wrap">
+            <div class="preview-checker">
               <div id="previewSprite" class="preview-sprite playing"></div>
             </div>
           </div>
 
-          <div class="control-card" style="margin-top: 15px">
-            <div class="control-card-title">Animation speed</div>
+          <div class="preview-controls">
+            <div class="control-strip">
+              <div class="control-strip-label">Animation speed</div>
 
-            <div class="control-row">
-              <input
-                id="fpsRange"
-                class="range-control"
-                type="range"
-                min="1"
-                max="30"
-                value="8"
-              />
+              <div class="speed-row">
+                <input
+                  id="fpsRange"
+                  class="range-control"
+                  type="range"
+                  min="1"
+                  max="30"
+                  value="8"
+                />
 
-              <span id="fpsValue" class="range-value"> 8 FPS </span>
+                <span id="fpsValue" class="range-value"> 8 FPS </span>
+              </div>
             </div>
-          </div>
 
-          <div class="control-card" style="margin-top: 10px">
-            <div class="control-card-title">Preview scale</div>
+            <div class="control-strip">
+              <div class="control-strip-label">Preview scale</div>
 
-            <div class="control-row">
-              <button data-scale="2" class="scale-btn">2×</button>
+              <div class="scale-controls">
+                <button data-scale="2">2×</button>
 
-              <button data-scale="4" class="scale-btn">4×</button>
+                <button data-scale="4">4×</button>
 
-              <button data-scale="6" class="scale-btn active">6×</button>
+                <button data-scale="6" class="active">6×</button>
 
-              <button data-scale="8" class="scale-btn">8×</button>
+                <button data-scale="8">8×</button>
 
-              <button data-scale="12" class="scale-btn">12×</button>
+                <button data-scale="12">12×</button>
 
-              <button data-scale="16" class="scale-btn">16×</button>
+                <button data-scale="16">16×</button>
+              </div>
             </div>
           </div>
 
           <div class="preview-meta">
             <div class="meta-box">
-              <div class="meta-label">Frames</div>
-              <div id="metaFrames" class="meta-value">1</div>
+              <span class="meta-label">Frames</span>
+              <strong id="metaFrames">1</strong>
             </div>
 
             <div class="meta-box">
-              <div class="meta-label">Canvas</div>
-              <div id="metaCanvas" class="meta-value">8×8</div>
+              <span class="meta-label">Canvas</span>
+              <strong id="metaCanvas">8×8</strong>
             </div>
 
             <div class="meta-box">
-              <div class="meta-label">FPS</div>
-              <div id="metaFPS" class="meta-value">8</div>
+              <span class="meta-label">FPS</span>
+              <strong id="metaFPS">8</strong>
             </div>
           </div>
         </section>
       </section>
 
-      <!-- TIMELINE -->
-
-      <section class="panel timeline-panel">
-        <div class="timeline-toolbar">
-          <div>
-            <div class="section-label">Animation</div>
-
-            <div class="section-title" style="margin: 2px 0 0">
-              <h2>Timeline</h2>
-            </div>
-          </div>
-
-          <div class="timeline-actions">
-            <button id="addFrameBtn" class="primary">+ Blank</button>
-
-            <button id="duplicateFrameBtn">Duplicate</button>
-
-            <button id="moveLeftBtn">←</button>
-
-            <button id="moveRightBtn">→</button>
-
-            <button id="deleteFrameBtn" class="danger">Delete</button>
-          </div>
-        </div>
-
-        <div id="timeline" class="timeline"></div>
-      </section>
-
-      <!-- EXPORT -->
+      <!-- =====================================================
+         EXPORT
+    ====================================================== -->
 
       <section class="panel export-panel">
         <div class="section-title">
@@ -272,32 +297,40 @@
 
         <div class="export-grid">
           <div class="export-card">
-            <h3>CSS Animation</h3>
+            <div class="export-icon">⌘</div>
 
-            <p>
-              Compile every frame into a pure CSS
-              <code>box-shadow</code> animation using <code>steps(1)</code>.
-            </p>
+            <div class="export-card-content">
+              <h3>CSS Animation</h3>
 
-            <div class="export-actions">
-              <button id="copyCSSBtn" class="primary">Copy CSS</button>
+              <p>
+                Compile your animation into a pure CSS
+                <code>box-shadow</code> sprite using <code>steps(1)</code>.
+              </p>
 
-              <button id="refreshCSSBtn">Recompile</button>
+              <div class="export-actions">
+                <button id="copyCSSBtn" class="primary">Copy CSS</button>
+
+                <button id="refreshCSSBtn">Recompile</button>
+              </div>
             </div>
           </div>
 
           <div class="export-card">
-            <h3>PNG Export</h3>
+            <div class="export-icon">▦</div>
 
-            <p>
-              Export the current frame or the entire animation as a horizontal
-              spritesheet.
-            </p>
+            <div class="export-card-content">
+              <h3>PNG Export</h3>
 
-            <div class="export-actions">
-              <button id="exportFrameBtn">Current Frame</button>
+              <p>
+                Export the current frame or the complete animation as a
+                horizontal spritesheet.
+              </p>
 
-              <button id="exportSheetBtn" class="primary">Spritesheet</button>
+              <div class="export-actions">
+                <button id="exportFrameBtn">Current Frame</button>
+
+                <button id="exportSheetBtn" class="primary">Spritesheet</button>
+              </div>
             </div>
           </div>
         </div>
@@ -310,7 +343,9 @@
         ></textarea>
       </section>
 
-      <!-- PROJECT -->
+      <!-- =====================================================
+         PROJECT
+    ====================================================== -->
 
       <section class="panel project-panel">
         <div class="section-title">
@@ -347,10 +382,20 @@
       </section>
     </main>
 
+    <!-- =======================================================
+       TOAST
+  ======================================================== -->
+
     <div id="toast" class="toast"></div>
+
+    <!-- =======================================================
+       CONFIRM MODAL
+  ======================================================== -->
 
     <div id="confirmModal" class="modal-backdrop">
       <div class="modal">
+        <div class="modal-spark">✦</div>
+
         <h2 id="modalTitle">Are you sure?</h2>
 
         <p id="modalText">This action cannot be undone.</p>
@@ -362,6 +407,7 @@
         </div>
       </div>
     </div>
+
+    <script src="script.js"></script>
   </body>
-  <script src="script.js"></script>
 </html>

@@ -1,538 +1,334 @@
-const CONFIG = {
-  DEFAULT_SIZE: 8,
-  DEFAULT_FPS: 8,
+/* =========================================================
+   SPRITE SPROUT
+   Spritesheet Animator
+   ========================================================= */
 
-  MIN_FPS: 1,
-  MAX_FPS: 30,
+"use strict";
 
-  MIN_SCALE: 2,
-  MAX_SCALE: 16,
-
-  STORAGE_KEY: "-pixel-art-project-v2",
-
-  PALETTE: [
-    "#302A35",
-    "#FFFFFF",
-    "#FF6B6B",
-    "#FF9F68",
-    "#FFD166",
-    "#95D5B2",
-    "#52B788",
-    "#4D96FF",
-    "#A78BFA",
-    "#F7C8DF",
-    "#F4A6C1",
-    "#6C63FF",
-    "#2D4059",
-    "#7A5C61",
-    "#B8B8A8",
-  ],
-};
-
-/*STATE*/
-
-const state = {
-  width: CONFIG.DEFAULT_SIZE,
-  height: CONFIG.DEFAULT_SIZE,
-
-  fps: CONFIG.DEFAULT_FPS,
-
-  frames: [createBlankFrame(CONFIG.DEFAULT_SIZE, CONFIG.DEFAULT_SIZE)],
-
-  activeFrame: 0,
-
-  color: "#302A35",
-
-  tool: "paint",
-
-  onionSkin: false,
-
-  symmetry: "off",
-
-  previewScale: 6,
-
-  playing: true,
-
-  projectName: "my-pixel-sprite",
-
-  recentColors: [],
-
-  history: [],
-  historyIndex: -1,
-
-  isDrawing: false,
-  lastPaintedIndex: null,
-};
-
-/*DOM*/
+/* =========================================================
+   HELPERS
+   ========================================================= */
 
 const $ = (selector) => document.querySelector(selector);
 
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
-const pixelGrid = $("#pixelGrid");
-const timeline = $("#timeline");
+const clone = (value) => JSON.parse(JSON.stringify(value));
 
-const colorPicker = $("#colorPicker");
-const currentColor = $("#currentColor");
+/* =========================================================
+   CONSTANTS
+   ========================================================= */
 
-const fpsRange = $("#fpsRange");
-const fpsValue = $("#fpsValue");
+const STORAGE_KEY = "sprite-sprout-project-v1";
 
-const previewSprite = $("#previewSprite");
+const PALETTE = [
+  "#302A35",
+  "#5C4B51",
+  "#9B5963",
+  "#D67A72",
+  "#F3A678",
+  "#F7D774",
+  "#F9E9A9",
+  "#A9D9C2",
+  "#5E9E8A",
+  "#78B6D0",
+  "#4C6A92",
+  "#F1EFE7",
+  "#FFFFFF",
+];
 
-const cssOutput = $("#cssOutput");
+/* =========================================================
+   STATE
+   ========================================================= */
 
-const toast = $("#toast");
+const state = {
+  width: 8,
+  height: 8,
 
-const frameInfo = $("#frameInfo");
+  fps: 8,
 
-const metaFrames = $("#metaFrames");
-const metaCanvas = $("#metaCanvas");
-const metaFPS = $("#metaFPS");
+  frames: [createEmptyFrame(8, 8)],
 
-const projectNameInput = $("#projectName");
+  activeFrameIndex: 0,
 
-/*FRAME HELPERS*/
+  tool: "paint",
 
-function createBlankFrame(width, height) {
+  color: "#302A35",
+
+  symmetry: "off",
+
+  onionSkin: false,
+
+  isPlaying: true,
+
+  scale: 6,
+
+  isDrawing: false,
+
+  history: [],
+
+  redoStack: [],
+
+  recentColors: [],
+
+  projectName: "my-pixel-sprite",
+};
+
+/* =========================================================
+   FRAME CREATION
+   ========================================================= */
+
+function createEmptyFrame(width, height) {
   return Array(width * height).fill(null);
 }
 
-function cloneFrame(frame) {
-  return [...frame];
+/* =========================================================
+   INITIALIZATION
+   ========================================================= */
+
+document.addEventListener("DOMContentLoaded", init);
+
+function init() {
+  buildPalette();
+
+  bindToolbar();
+
+  bindEditorControls();
+
+  bindSymmetryControls();
+
+  bindTimelineControls();
+
+  bindPreviewControls();
+
+  bindExportControls();
+
+  bindProjectControls();
+
+  bindKeyboardShortcuts();
+
+  restoreAutosave();
+
+  renderAll();
 }
 
-function cloneFrames(frames) {
-  return frames.map((frame) => [...frame]);
-}
+/* =========================================================
+   PALETTE
+   ========================================================= */
 
-function getCurrentFrame() {
-  return state.frames[state.activeFrame];
-}
+function buildPalette() {
+  const palette = $("#palette");
 
-function getIndex(x, y) {
-  return y * state.width + x;
-}
+  palette.innerHTML = "";
 
-function getCoordinates(index) {
-  return {
-    x: index % state.width,
-    y: Math.floor(index / state.width),
-  };
-}
+  PALETTE.forEach((color) => {
+    const button = document.createElement("button");
 
-/*HISTORY*/
+    button.type = "button";
 
-function snapshot() {
-  return {
-    width: state.width,
-    height: state.height,
-    frames: cloneFrames(state.frames),
-    activeFrame: state.activeFrame,
-  };
-}
+    button.style.background = color;
 
-function restoreSnapshot(snapshotData) {
-  state.width = snapshotData.width;
-  state.height = snapshotData.height;
+    button.title = color;
 
-  state.frames = cloneFrames(snapshotData.frames);
-
-  state.activeFrame = Math.min(
-    snapshotData.activeFrame,
-    state.frames.length - 1,
-  );
-}
-
-function pushHistory() {
-  const current = snapshot();
-
-  if (state.historyIndex < state.history.length - 1) {
-    state.history = state.history.slice(0, state.historyIndex + 1);
-  }
-
-  state.history.push(current);
-
-  /*
-   * Keep the history useful without allowing
-   * an accidental long drawing session to consume
-   * unlimited memory.
-   */
-  if (state.history.length > 80) {
-    state.history.shift();
-  }
-
-  state.historyIndex = state.history.length - 1;
-
-  updateHistoryButtons();
-}
-
-function undo() {
-  if (state.historyIndex <= 0) {
-    return;
-  }
-
-  state.historyIndex--;
-
-  restoreSnapshot(state.history[state.historyIndex]);
-
-  renderEverything();
-
-  showToast("Undid last change");
-}
-
-function redo() {
-  if (state.historyIndex >= state.history.length - 1) {
-    return;
-  }
-
-  state.historyIndex++;
-
-  restoreSnapshot(state.history[state.historyIndex]);
-
-  renderEverything();
-
-  showToast("Redid change");
-}
-
-function updateHistoryButtons() {
-  $("#undoBtn").disabled = state.historyIndex <= 0;
-
-  $("#redoBtn").disabled = state.historyIndex >= state.history.length - 1;
-}
-
-/*DRAWING*/
-
-function paintPixel(index) {
-  const frame = getCurrentFrame();
-
-  const { x, y } = getCoordinates(index);
-
-  if (state.tool === "erase") {
-    setPixel(x, y, null);
-  } else {
-    setPixel(x, y, state.color);
-  }
-}
-
-function setPixel(x, y, color) {
-  if (x < 0 || y < 0 || x >= state.width || y >= state.height) {
-    return;
-  }
-
-  getCurrentFrame()[getIndex(x, y)] = color;
-}
-
-function applySymmetry(x, y, color) {
-  const points = new Set();
-
-  points.add(`${x},${y}`);
-
-  if (state.symmetry === "horizontal" || state.symmetry === "both") {
-    points.add(`${state.width - 1 - x},${y}`);
-  }
-
-  if (state.symmetry === "vertical" || state.symmetry === "both") {
-    points.add(`${x},${state.height - 1 - y}`);
-  }
-
-  if (state.symmetry === "both") {
-    points.add(`${state.width - 1 - x},${state.height - 1 - y}`);
-  }
-
-  for (const point of points) {
-    const [px, py] = point.split(",").map(Number);
-
-    setPixel(px, py, color);
-  }
-}
-
-function drawAt(index) {
-  const { x, y } = getCoordinates(index);
-
-  const color = state.tool === "erase" ? null : state.color;
-
-  applySymmetry(x, y, color);
-
-  renderGrid();
-  renderPreview();
-  renderTimeline();
-
-  saveToLocalStorage();
-}
-
-function handlePointerDown(event) {
-  const cell = event.target.closest(".pixel");
-
-  if (!cell) {
-    return;
-  }
-
-  event.preventDefault();
-
-  state.isDrawing = true;
-
-  /*
-   * Save only once for the entire drag operation.
-   */
-  pushHistory();
-
-  const index = Number(cell.dataset.index);
-
-  state.lastPaintedIndex = index;
-
-  drawAt(index);
-}
-
-function handlePointerMove(event) {
-  if (!state.isDrawing) {
-    return;
-  }
-
-  const element = document.elementFromPoint(event.clientX, event.clientY);
-
-  if (!element) {
-    return;
-  }
-
-  const cell = element.closest(".pixel");
-
-  if (!cell) {
-    return;
-  }
-
-  const index = Number(cell.dataset.index);
-
-  if (index === state.lastPaintedIndex) {
-    return;
-  }
-
-  state.lastPaintedIndex = index;
-
-  drawAt(index);
-}
-
-function endDrawing() {
-  state.isDrawing = false;
-  state.lastPaintedIndex = null;
-
-  saveToLocalStorage();
-}
-
-/*GRID*/
-
-function renderGrid() {
-  pixelGrid.innerHTML = "";
-
-  pixelGrid.style.gridTemplateColumns = `repeat(${state.width}, var(--pixel-size))`;
-
-  pixelGrid.style.gridTemplateRows = `repeat(${state.height}, var(--pixel-size))`;
-
-  const previousFrame =
-    state.activeFrame > 0 ? state.frames[state.activeFrame - 1] : null;
-
-  const frame = getCurrentFrame();
-
-  const fragment = document.createDocumentFragment();
-
-  frame.forEach((color, index) => {
-    const cell = document.createElement("div");
-
-    cell.className = "pixel";
-
-    cell.dataset.index = index;
-
-    if (color) {
-      cell.style.background = color;
-      cell.classList.add("filled");
-    }
-
-    /*
-     * Onion skin uses the previous frame.
-     */
-    if (state.onionSkin && previousFrame && !color && previousFrame[index]) {
-      cell.classList.add("onion");
-      cell.style.setProperty("--onion-color", previousFrame[index]);
-    }
-
-    fragment.appendChild(cell);
-  });
-
-  pixelGrid.appendChild(fragment);
-
-  updateFrameInfo();
-}
-
-function updateFrameInfo() {
-  frameInfo.textContent = `Frame ${state.activeFrame + 1} / ${
-    state.frames.length
-  } · ${state.width} × ${state.height}`;
-
-  metaFrames.textContent = state.frames.length;
-
-  metaCanvas.textContent = `${state.width}×${state.height}`;
-
-  metaFPS.textContent = state.fps;
-}
-
-/*TIMELINE*/
-
-function renderTimeline() {
-  timeline.innerHTML = "";
-
-  state.frames.forEach((frame, index) => {
-    const card = document.createElement("div");
-
-    card.className =
-      "frame-card" + (index === state.activeFrame ? " active" : "");
-
-    card.dataset.frame = index;
-
-    const thumbnail = document.createElement("div");
-
-    thumbnail.className = "frame-thumbnail";
-
-    thumbnail.style.gridTemplateColumns = `repeat(${state.width}, 1fr)`;
-
-    thumbnail.style.gridTemplateRows = `repeat(${state.height}, 1fr)`;
-
-    frame.forEach((color) => {
-      const pixel = document.createElement("div");
-
-      pixel.className = "thumbnail-pixel";
-
-      if (color) {
-        pixel.style.background = color;
-      }
-
-      thumbnail.appendChild(pixel);
+    button.addEventListener("click", () => {
+      setColor(color);
     });
 
-    const label = document.createElement("div");
-
-    label.className = "frame-number";
-
-    label.textContent = `Frame ${index + 1}`;
-
-    card.appendChild(thumbnail);
-    card.appendChild(label);
-
-    card.addEventListener("click", () => selectFrame(index));
-
-    timeline.appendChild(card);
+    palette.appendChild(button);
   });
 }
 
-function selectFrame(index) {
-  if (index < 0 || index >= state.frames.length) {
+function buildRecentPalette() {
+  const container = $("#palette");
+
+  if (!state.recentColors.length) {
     return;
   }
 
-  state.activeFrame = index;
-
-  renderEverything();
-
-  saveToLocalStorage();
+  /*
+   * Keep the main palette intact and mark recent colors
+   * through title / ordering rather than creating another
+   * large control.
+   */
 }
 
-function addFrame() {
-  pushHistory();
+function setColor(color) {
+  state.color = color.toUpperCase();
 
-  state.frames.splice(
-    state.activeFrame + 1,
-    0,
-    createBlankFrame(state.width, state.height),
-  );
+  $("#colorPicker").value = color;
 
-  state.activeFrame++;
+  $("#currentColor").textContent = state.color;
 
-  renderEverything();
+  if (!state.recentColors.includes(state.color)) {
+    state.recentColors.unshift(state.color);
 
-  saveToLocalStorage();
-
-  showToast("Blank frame added");
-}
-
-function duplicateFrame() {
-  pushHistory();
-
-  state.frames.splice(state.activeFrame + 1, 0, cloneFrame(getCurrentFrame()));
-
-  state.activeFrame++;
-
-  renderEverything();
-
-  saveToLocalStorage();
-
-  showToast("Frame duplicated");
-}
-
-function deleteFrame() {
-  if (state.frames.length === 1) {
-    showToast("You need at least one frame");
-    return;
+    state.recentColors = state.recentColors.slice(0, 8);
   }
-
-  pushHistory();
-
-  state.frames.splice(state.activeFrame, 1);
-
-  state.activeFrame = Math.min(state.activeFrame, state.frames.length - 1);
-
-  renderEverything();
-
-  saveToLocalStorage();
-
-  showToast("Frame deleted");
 }
 
-function moveFrame(direction) {
-  const target = state.activeFrame + direction;
+/* =========================================================
+   TOOLBAR
+   ========================================================= */
 
-  if (target < 0 || target >= state.frames.length) {
-    return;
-  }
+function bindToolbar() {
+  $("#paintBtn").addEventListener("click", () => {
+    state.tool = "paint";
 
-  pushHistory();
+    syncToolbar();
+  });
 
-  const temp = state.frames[state.activeFrame];
+  $("#eraseBtn").addEventListener("click", () => {
+    state.tool = "erase";
 
-  state.frames[state.activeFrame] = state.frames[target];
+    syncToolbar();
+  });
 
-  state.frames[target] = temp;
+  $("#onionBtn").addEventListener("click", () => {
+    state.onionSkin = !state.onionSkin;
 
-  state.activeFrame = target;
+    syncToolbar();
 
-  renderEverything();
+    renderGrid();
+  });
 
-  saveToLocalStorage();
+  $("#symmetryBtn").addEventListener("click", () => {
+    cycleSymmetry();
+  });
+
+  $("#clearFrameBtn").addEventListener("click", () => {
+    confirmAction(
+      "Clear current frame?",
+      "Every pixel in the selected frame will be removed.",
+      clearCurrentFrame,
+    );
+  });
+
+  $("#clearAllBtn").addEventListener("click", () => {
+    confirmAction(
+      "Clear all frames?",
+      "Every frame in the animation will be cleared.",
+      clearAllFrames,
+    );
+  });
+
+  $("#undoBtn").addEventListener("click", undo);
+
+  $("#redoBtn").addEventListener("click", redo);
 }
 
-/*RESIZE CANVAS*/
+function syncToolbar() {
+  $("#paintBtn").classList.toggle("active", state.tool === "paint");
 
-function resizeCanvas(newSize) {
-  const oldWidth = state.width;
-  const oldHeight = state.height;
+  $("#eraseBtn").classList.toggle("active", state.tool === "erase");
 
-  if (newSize === oldWidth && newSize === oldHeight) {
-    return;
-  }
+  $("#onionBtn").classList.toggle("active", state.onionSkin);
 
+  const labels = {
+    off: "Symmetry: Off",
+    horizontal: "Symmetry: Horizontal",
+    vertical: "Symmetry: Vertical",
+    both: "Symmetry: Both",
+  };
+
+  $("#symmetryToolbarText").textContent = labels[state.symmetry];
+}
+
+/* =========================================================
+   SYMMETRY
+   ========================================================= */
+
+function bindSymmetryControls() {
+  const buttons = {
+    off: $("#symOffBtn"),
+    horizontal: $("#symHorizontalBtn"),
+    vertical: $("#symVerticalBtn"),
+    both: $("#symBothBtn"),
+  };
+
+  Object.entries(buttons).forEach(([mode, button]) => {
+    button.addEventListener("click", () => {
+      state.symmetry = mode;
+
+      syncSymmetry();
+
+      renderGrid();
+    });
+  });
+}
+
+function syncSymmetry() {
+  const modes = ["off", "horizontal", "vertical", "both"];
+
+  modes.forEach((mode) => {
+    const id = mode === "off" ? "#symOffBtn" : `#sym${capitalize(mode)}Btn`;
+
+    const button = $(id);
+
+    if (button) {
+      button.classList.toggle("active", state.symmetry === mode);
+    }
+  });
+
+  syncToolbar();
+}
+
+function capitalize(value) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function cycleSymmetry() {
+  const modes = ["off", "horizontal", "vertical", "both"];
+
+  const current = modes.indexOf(state.symmetry);
+
+  state.symmetry = modes[(current + 1) % modes.length];
+
+  syncSymmetry();
+
+  renderGrid();
+}
+
+/* =========================================================
+   EDITOR CONTROLS
+   ========================================================= */
+
+function bindEditorControls() {
+  $$(".size-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const size = Number(button.dataset.size);
+
+      if (size === state.width && size === state.height) {
+        return;
+      }
+
+      resizeCanvas(size, size);
+    });
+  });
+
+  $("#colorPicker").addEventListener("input", (event) => {
+    setColor(event.target.value);
+  });
+}
+
+/* =========================================================
+   CANVAS RESIZE
+   ========================================================= */
+
+function resizeCanvas(newWidth, newHeight) {
   pushHistory();
 
   state.frames = state.frames.map((oldFrame) => {
-    const newFrame = createBlankFrame(newSize, newSize);
+    const newFrame = createEmptyFrame(newWidth, newHeight);
 
-    const overlapWidth = Math.min(oldWidth, newSize);
+    const copyWidth = Math.min(state.width, newWidth);
 
-    const overlapHeight = Math.min(oldHeight, newSize);
+    const copyHeight = Math.min(state.height, newHeight);
 
-    for (let y = 0; y < overlapHeight; y++) {
-      for (let x = 0; x < overlapWidth; x++) {
-        const oldIndex = y * oldWidth + x;
+    for (let y = 0; y < copyHeight; y++) {
+      for (let x = 0; x < copyWidth; x++) {
+        const oldIndex = y * state.width + x;
 
-        const newIndex = y * newSize + x;
+        const newIndex = y * newWidth + x;
 
         newFrame[newIndex] = oldFrame[oldIndex];
       }
@@ -541,362 +337,663 @@ function resizeCanvas(newSize) {
     return newFrame;
   });
 
-  state.width = newSize;
-  state.height = newSize;
+  state.width = newWidth;
+  state.height = newHeight;
 
-  renderEverything();
+  showToast(`Canvas changed to ${newWidth}×${newHeight}`);
 
-  saveToLocalStorage();
+  renderAll();
 
-  showToast(`Canvas resized to ${newSize}×${newSize}`);
+  autosave();
 }
 
-/*CLEAR*/
+/* =========================================================
+   PIXEL GRID
+   ========================================================= */
+
+function renderGrid() {
+  const grid = $("#pixelGrid");
+
+  grid.innerHTML = "";
+
+  grid.style.gridTemplateColumns = `repeat(${state.width}, 1fr)`;
+
+  grid.style.gridTemplateRows = `repeat(${state.height}, 1fr)`;
+
+  const frame = state.frames[state.activeFrameIndex];
+
+  frame.forEach((color, index) => {
+    const pixel = document.createElement("div");
+
+    pixel.className = "pixel";
+
+    if (color) {
+      pixel.style.background = color;
+    }
+
+    pixel.dataset.index = index;
+
+    pixel.addEventListener("pointerdown", handlePixelPointerDown);
+
+    pixel.addEventListener("pointerenter", handlePixelPointerEnter);
+
+    pixel.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+
+      paintIndex(index, "erase");
+    });
+
+    grid.appendChild(pixel);
+  });
+
+  renderOnionSkin();
+}
+
+function renderOnionSkin() {
+  if (!state.onionSkin) {
+    return;
+  }
+
+  if (state.activeFrameIndex === 0) {
+    return;
+  }
+
+  const previousFrame = state.frames[state.activeFrameIndex - 1];
+
+  const pixels = $$(".pixel");
+
+  previousFrame.forEach((color, index) => {
+    if (!color) {
+      return;
+    }
+
+    const pixel = pixels[index];
+
+    if (!pixel) {
+      return;
+    }
+
+    pixel.classList.add("onion");
+
+    pixel.style.background = `${color}55`;
+  });
+}
+
+/* =========================================================
+   PAINTING
+   ========================================================= */
+
+function handlePixelPointerDown(event) {
+  event.preventDefault();
+
+  state.isDrawing = true;
+
+  pushHistory();
+
+  const index = Number(event.currentTarget.dataset.index);
+
+  const tool = event.button === 2 ? "erase" : state.tool;
+
+  paintIndex(index, tool);
+}
+
+function handlePixelPointerEnter(event) {
+  if (!state.isDrawing) {
+    return;
+  }
+
+  const index = Number(event.currentTarget.dataset.index);
+
+  paintIndex(index, state.tool);
+}
+
+window.addEventListener("pointerup", () => {
+  if (!state.isDrawing) {
+    return;
+  }
+
+  state.isDrawing = false;
+
+  renderPreview();
+
+  autosave();
+});
+
+function paintIndex(index, tool = state.tool) {
+  const x = index % state.width;
+
+  const y = Math.floor(index / state.width);
+
+  const targets = getSymmetryTargets(x, y);
+
+  targets.forEach(({ x, y }) => {
+    if (x < 0 || y < 0 || x >= state.width || y >= state.height) {
+      return;
+    }
+
+    const targetIndex = y * state.width + x;
+
+    state.frames[state.activeFrameIndex][targetIndex] =
+      tool === "erase" ? null : state.color;
+  });
+
+  renderGrid();
+}
+
+/* =========================================================
+   SYMMETRY TARGETS
+   ========================================================= */
+
+function getSymmetryTargets(x, y) {
+  const targets = [{ x, y }];
+
+  if (state.symmetry === "horizontal" || state.symmetry === "both") {
+    targets.push({
+      x: state.width - 1 - x,
+      y,
+    });
+  }
+
+  if (state.symmetry === "vertical" || state.symmetry === "both") {
+    targets.push({
+      x,
+      y: state.height - 1 - y,
+    });
+  }
+
+  if (state.symmetry === "both") {
+    targets.push({
+      x: state.width - 1 - x,
+      y: state.height - 1 - y,
+    });
+  }
+
+  const unique = new Map();
+
+  targets.forEach((target) => {
+    unique.set(`${target.x}:${target.y}`, target);
+  });
+
+  return [...unique.values()];
+}
+
+/* =========================================================
+   TIMELINE
+   ========================================================= */
+
+function bindTimelineControls() {
+  $("#addFrameBtn").addEventListener("click", addFrame);
+
+  $("#duplicateFrameBtn").addEventListener("click", duplicateFrame);
+
+  $("#deleteFrameBtn").addEventListener("click", deleteFrame);
+
+  $("#moveLeftBtn").addEventListener("click", () => moveFrame(-1));
+
+  $("#moveRightBtn").addEventListener("click", () => moveFrame(1));
+}
+
+function renderTimeline() {
+  const timeline = $("#timeline");
+
+  timeline.innerHTML = "";
+
+  state.frames.forEach((frame, index) => {
+    const item = document.createElement("div");
+
+    item.className = "frame-thumb";
+
+    if (index === state.activeFrameIndex) {
+      item.classList.add("active");
+    }
+
+    item.addEventListener("click", () => selectFrame(index));
+
+    const number = document.createElement("span");
+
+    number.className = "frame-number";
+
+    number.textContent = String(index + 1);
+
+    item.appendChild(number);
+
+    const preview = document.createElement("div");
+
+    preview.className = "frame-preview";
+
+    preview.style.gridTemplateColumns = `repeat(${state.width}, 1fr)`;
+
+    preview.style.gridTemplateRows = `repeat(${state.height}, 1fr)`;
+
+    frame.forEach((color) => {
+      const pixel = document.createElement("div");
+
+      if (color) {
+        pixel.style.background = color;
+      }
+
+      preview.appendChild(pixel);
+    });
+
+    item.appendChild(preview);
+
+    timeline.appendChild(item);
+  });
+
+  $("#timelineFrameCount").textContent = `${state.frames.length} ${
+    state.frames.length === 1 ? "frame" : "frames"
+  }`;
+}
+
+function selectFrame(index) {
+  if (index < 0 || index >= state.frames.length) {
+    return;
+  }
+
+  state.activeFrameIndex = index;
+
+  renderAll();
+}
+
+function addFrame() {
+  pushHistory();
+
+  state.frames.splice(
+    state.activeFrameIndex + 1,
+    0,
+    createEmptyFrame(state.width, state.height),
+  );
+
+  state.activeFrameIndex++;
+
+  state.isPlaying = false;
+
+  syncPlayButton();
+
+  showToast("Blank frame added");
+
+  renderAll();
+
+  autosave();
+}
+
+function duplicateFrame() {
+  pushHistory();
+
+  const current = state.frames[state.activeFrameIndex];
+
+  state.frames.splice(state.activeFrameIndex + 1, 0, clone(current));
+
+  state.activeFrameIndex++;
+
+  state.isPlaying = false;
+
+  syncPlayButton();
+
+  showToast("Frame duplicated");
+
+  renderAll();
+
+  autosave();
+}
+
+function deleteFrame() {
+  if (state.frames.length === 1) {
+    clearCurrentFrame();
+
+    return;
+  }
+
+  confirmAction(
+    "Delete this frame?",
+    "The selected frame will be permanently removed.",
+    () => {
+      pushHistory();
+
+      state.frames.splice(state.activeFrameIndex, 1);
+
+      state.activeFrameIndex = Math.min(
+        state.activeFrameIndex,
+        state.frames.length - 1,
+      );
+
+      showToast("Frame deleted");
+
+      renderAll();
+
+      autosave();
+    },
+  );
+}
+
+function moveFrame(direction) {
+  const from = state.activeFrameIndex;
+
+  const to = from + direction;
+
+  if (to < 0 || to >= state.frames.length) {
+    return;
+  }
+
+  pushHistory();
+
+  [state.frames[from], state.frames[to]] = [
+    state.frames[to],
+    state.frames[from],
+  ];
+
+  state.activeFrameIndex = to;
+
+  renderAll();
+
+  autosave();
+}
+
+/* =========================================================
+   CLEAR
+   ========================================================= */
 
 function clearCurrentFrame() {
   pushHistory();
 
-  state.frames[state.activeFrame] = createBlankFrame(state.width, state.height);
+  state.frames[state.activeFrameIndex] = createEmptyFrame(
+    state.width,
+    state.height,
+  );
 
-  renderEverything();
+  showToast("Current frame cleared");
 
-  saveToLocalStorage();
+  renderAll();
 
-  showToast("Frame cleared");
+  autosave();
 }
 
 function clearAllFrames() {
   pushHistory();
 
   state.frames = state.frames.map(() =>
-    createBlankFrame(state.width, state.height),
+    createEmptyFrame(state.width, state.height),
   );
 
-  renderEverything();
-
-  saveToLocalStorage();
-
   showToast("All frames cleared");
+
+  renderAll();
+
+  autosave();
 }
 
-/*COLOR*/
+/* =========================================================
+   PREVIEW
+   ========================================================= */
 
-function setColor(color) {
-  state.color = color.toUpperCase();
+function bindPreviewControls() {
+  $("#playBtn").addEventListener("click", togglePlayback);
 
-  colorPicker.value = normalizeColorForInput(state.color);
+  $("#fpsRange").addEventListener("input", (event) => {
+    state.fps = Number(event.target.value);
 
-  currentColor.textContent = state.color;
+    updateFPS();
 
-  addRecentColor(state.color);
+    updateAnimationStyle();
 
-  renderPalette();
-}
-
-function normalizeColorForInput(color) {
-  if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
-    return color;
-  }
-
-  return "#302A35";
-}
-
-function addRecentColor(color) {
-  state.recentColors = state.recentColors.filter((item) => item !== color);
-
-  state.recentColors.unshift(color);
-
-  state.recentColors = state.recentColors.slice(0, 12);
-
-  saveToLocalStorage();
-}
-
-function createSwatch(color) {
-  const button = document.createElement("button");
-
-  button.className = "swatch";
-
-  if (color === state.color) {
-    button.classList.add("selected");
-  }
-
-  button.style.background = color;
-  button.title = color;
-
-  button.addEventListener("click", () => {
-    state.tool = "paint";
-
-    updateToolButtons();
-
-    setColor(color);
+    autosave();
   });
 
-  return button;
-}
+  $$(".scale-controls button").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.scale = Number(button.dataset.scale);
 
-function renderPalette() {
-  const palette = $("#palette");
+      syncScaleButtons();
 
-  const recent = $("#recentPalette");
-
-  palette.innerHTML = "";
-  recent.innerHTML = "";
-
-  CONFIG.PALETTE.forEach((color) => {
-    palette.appendChild(createSwatch(color));
-  });
-
-  state.recentColors.forEach((color) => {
-    recent.appendChild(createSwatch(color));
+      updatePreviewScale();
+    });
   });
 }
 
-/*TOOLS*/
+function togglePlayback() {
+  state.isPlaying = !state.isPlaying;
 
-function setTool(tool) {
-  state.tool = tool;
-
-  updateToolButtons();
+  syncPlayButton();
 }
 
-function updateToolButtons() {
-  $("#paintBtn").classList.toggle("active", state.tool === "paint");
+function syncPlayButton() {
+  const button = $("#playBtn");
 
-  $("#eraseBtn").classList.toggle("active", state.tool === "erase");
+  button.textContent = state.isPlaying ? "Pause" : "Play";
+
+  $("#previewSprite").classList.toggle("playing", state.isPlaying);
+
+  $("#previewSprite").classList.toggle("paused", !state.isPlaying);
 }
 
-function setSymmetry(mode) {
-  state.symmetry = mode;
+function updateFPS() {
+  $("#fpsRange").value = state.fps;
 
-  $("#symOffBtn").classList.toggle("active", mode === "off");
+  $("#fpsValue").textContent = `${state.fps} FPS`;
 
-  $("#symHorizontalBtn").classList.toggle("active", mode === "horizontal");
-
-  $("#symVerticalBtn").classList.toggle("active", mode === "vertical");
-
-  $("#symBothBtn").classList.toggle("active", mode === "both");
-
-  const labelMap = {
-    off: "Symmetry: Off",
-    horizontal: "Symmetry: Horizontal",
-    vertical: "Symmetry: Vertical",
-    both: "Symmetry: Both",
-  };
-
-  $("#symmetryBtn").querySelector("span").textContent = labelMap[mode];
+  $("#metaFPS").textContent = state.fps;
 }
 
-function cycleSymmetry() {
-  const modes = ["off", "horizontal", "vertical", "both"];
-
-  const current = modes.indexOf(state.symmetry);
-
-  setSymmetry(modes[(current + 1) % modes.length]);
-}
-
-/*ONION SKIN*/
-
-function toggleOnionSkin() {
-  state.onionSkin = !state.onionSkin;
-
-  $("#onionBtn").classList.toggle("active", state.onionSkin);
-
-  renderGrid();
-
-  saveToLocalStorage();
-}
-
-/*PREVIEW*/
-
-function compileFrameToShadows(frame, includeEmpty = false) {
-  const shadows = [];
-
-  frame.forEach((color, index) => {
-    if (!color && !includeEmpty) {
-      return;
-    }
-
-    const { x, y } = getCoordinates(index);
-
-    if (color) {
-      shadows.push(`${x}px ${y}px 0 ${color}`);
-    }
+function syncScaleButtons() {
+  $$(".scale-controls button").forEach((button) => {
+    button.classList.toggle(
+      "active",
+      Number(button.dataset.scale) === state.scale,
+    );
   });
-
-  return shadows.join(",\n        ");
 }
+
+function updatePreviewScale() {
+  const sprite = $("#previewSprite");
+
+  sprite.style.transform = `scale(${state.scale})`;
+}
+
+function renderPreview() {
+  updateAnimationStyle();
+
+  updatePreviewScale();
+}
+
+/* =========================================================
+   CSS COMPILER
+   ========================================================= */
 
 function compileCSS() {
   const frameCount = state.frames.length;
 
-  const duration = frameCount / state.fps;
+  const frameDuration = 1 / state.fps;
 
-  let keyframes = "";
+  const lines = [];
 
-  state.frames.forEach((frame, index) => {
-    const percentage = frameCount === 1 ? 0 : (index / frameCount) * 100;
+  lines.push(`/* Sprite Sprout export: ${state.projectName} */`);
 
-    const shadows = compileFrameToShadows(frame);
+  lines.push(`.sprite-sprout {`);
 
-    keyframes += `
-    ${percentage.toFixed(4)}% {
-        box-shadow: ${shadows || "0 0 0 transparent"};
-    }`;
+  lines.push(`  width: 1px;`);
+
+  lines.push(`  height: 1px;`);
+
+  lines.push(`  image-rendering: pixelated;`);
+
+  lines.push(
+    `  animation: ${slugify(state.projectName)} ${(
+      frameDuration * frameCount
+    ).toFixed(3)}s steps(1) infinite;`,
+  );
+
+  lines.push(`}`);
+
+  lines.push("");
+
+  lines.push(`@keyframes ${slugify(state.projectName)} {`);
+
+  state.frames.forEach((frame, frameIndex) => {
+    const percent = frameCount === 1 ? 0 : (frameIndex / frameCount) * 100;
+
+    const shadows = compileFrameShadows(frame);
+
+    lines.push(`  ${percent.toFixed(2)}% {`);
+
+    lines.push(`    box-shadow: ${shadows || "none"};`);
+
+    lines.push(`  }`);
   });
 
-  /*
-   * Duplicate first frame at 100%.
-   * This gives the animation a clean loop.
-   */
-  const firstShadows = compileFrameToShadows(state.frames[0]);
+  lines.push("}");
 
-  keyframes += `
-    100% {
-        box-shadow: ${firstShadows || "0 0 0 transparent"};
-    }`;
-
-  return `/*  Sprite Sprout: generated CSS */
-
-@keyframes PixelSprite {
-${keyframes}
+  return lines.join("\n");
 }
 
-.pixel-sprite {
-    width: 1px;
-    height: 1px;
-
-    background: transparent;
-
-    animation:
-        PixelSprite ${duration.toFixed(3)}s
-        steps(1)
-        infinite;
-
-    image-rendering: pixelated;
-}
-`;
-}
-
-function injectAnimationCSS() {
-  let style = document.getElementById("runtimePixelAnimation");
-
-  if (!style) {
-    style = document.createElement("style");
-
-    style.id = "runtimePixelAnimation";
-
-    document.head.appendChild(style);
-  }
-
-  style.textContent = compileCSS();
-}
-
-function renderPreview() {
-  injectAnimationCSS();
-
-  const duration = state.frames.length / state.fps;
-
-  previewSprite.style.transform = `scale(${state.previewScale})`;
-
-  previewSprite.style.animationDuration = `${duration}s`;
-
-  previewSprite.classList.toggle("playing", state.playing);
-
-  /*
-   * Force animation restart when
-   * the compiled CSS changes.
-   */
-  if (state.playing) {
-    previewSprite.style.animationName = "none";
-
-    requestAnimationFrame(() => {
-      previewSprite.style.animationName = "PixelSprite";
-    });
-  }
-}
-
-function togglePlayback() {
-  state.playing = !state.playing;
-
-  $("#playBtn").textContent = state.playing ? "Pause" : "Play";
-
-  renderPreview();
-}
-
-/*FPS*/
-
-function updateFPS(value) {
-  state.fps = Number(value);
-
-  fpsValue.textContent = `${state.fps} FPS`;
-
-  fpsRange.value = state.fps;
-
-  renderPreview();
-  updateFrameInfo();
-
-  saveToLocalStorage();
-}
-
-/*SCALE*/
-
-function updateScale(scale) {
-  state.previewScale = Number(scale);
-
-  $$(".scale-btn").forEach((button) => {
-    button.classList.toggle(
-      "active",
-      Number(button.dataset.scale) === state.previewScale,
-    );
-  });
-
-  renderPreview();
-}
-
-/*PNG EXPORT*/
-
-function frameToCanvas(frame, pixelSize = 1) {
-  const canvas = document.createElement("canvas");
-
-  canvas.width = state.width * pixelSize;
-
-  canvas.height = state.height * pixelSize;
-
-  const ctx = canvas.getContext("2d");
-
-  ctx.imageSmoothingEnabled = false;
+function compileFrameShadows(frame) {
+  const shadows = [];
 
   frame.forEach((color, index) => {
     if (!color) {
       return;
     }
 
-    const { x, y } = getCoordinates(index);
+    const x = index % state.width;
 
-    ctx.fillStyle = color;
+    const y = Math.floor(index / state.width);
 
-    ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+    shadows.push(`${x}px ${y}px 0 ${color}`);
+  });
+
+  return shadows.join(",\n      ");
+}
+
+function slugify(value) {
+  return (
+    value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "sprite-animation"
+  );
+}
+
+function updateAnimationStyle() {
+  const css = compileCSS();
+
+  $("#cssOutput").value = css;
+
+  let style = document.getElementById("sprite-runtime-style");
+
+  if (!style) {
+    style = document.createElement("style");
+
+    style.id = "sprite-runtime-style";
+
+    document.head.appendChild(style);
+  }
+
+  const animationName = slugify(state.projectName);
+
+  const duration = (state.frames.length / state.fps).toFixed(3);
+
+  const keyframes = state.frames
+    .map((frame, index) => {
+      const percent =
+        state.frames.length === 1 ? 0 : (index / state.frames.length) * 100;
+
+      const shadows = compileFrameShadows(frame);
+
+      return `
+          ${percent.toFixed(2)}% {
+            box-shadow: ${shadows || "none"};
+          }
+        `;
+    })
+    .join("\n");
+
+  style.textContent = `
+
+    @keyframes ${animationName} {
+      ${keyframes}
+    }
+
+    .preview-sprite {
+      animation-name: ${animationName};
+      animation-duration: ${duration}s;
+      animation-timing-function: steps(1, end);
+      animation-iteration-count: infinite;
+      animation-play-state: ${state.isPlaying ? "running" : "paused"};
+    }
+
+  `;
+}
+
+/* =========================================================
+   EXPORT CONTROLS
+   ========================================================= */
+
+function bindExportControls() {
+  $("#copyCSSBtn").addEventListener("click", async () => {
+    const css = compileCSS();
+
+    try {
+      await navigator.clipboard.writeText(css);
+
+      showToast("CSS copied to clipboard");
+    } catch {
+      $("#cssOutput").select();
+
+      document.execCommand("copy");
+
+      showToast("CSS copied");
+    }
+  });
+
+  $("#refreshCSSBtn").addEventListener("click", () => {
+    updateAnimationStyle();
+
+    showToast("CSS recompiled");
+  });
+
+  $("#exportFrameBtn").addEventListener("click", exportCurrentFrame);
+
+  $("#exportSheetBtn").addEventListener("click", exportSpritesheet);
+}
+
+/* =========================================================
+   PNG EXPORT
+   ========================================================= */
+
+function createFrameCanvas(frame, scale = 16) {
+  const canvas = document.createElement("canvas");
+
+  canvas.width = state.width * scale;
+
+  canvas.height = state.height * scale;
+
+  const context = canvas.getContext("2d");
+
+  context.imageSmoothingEnabled = false;
+
+  frame.forEach((color, index) => {
+    if (!color) {
+      return;
+    }
+
+    const x = index % state.width;
+
+    const y = Math.floor(index / state.width);
+
+    context.fillStyle = color;
+
+    context.fillRect(x * scale, y * scale, scale, scale);
   });
 
   return canvas;
 }
 
-function downloadCanvas(canvas, filename) {
-  const link = document.createElement("a");
-
-  link.download = filename;
-
-  link.href = canvas.toDataURL("image/png");
-
-  link.click();
-}
-
 function exportCurrentFrame() {
-  const canvas = frameToCanvas(getCurrentFrame(), 16);
+  const canvas = createFrameCanvas(state.frames[state.activeFrameIndex], 16);
 
   downloadCanvas(
     canvas,
-    `${state.projectName}-frame-${state.activeFrame + 1}.png`,
+    `${slugify(state.projectName)}-frame-${state.activeFrameIndex + 1}.png`,
   );
 
   showToast("Frame exported");
@@ -911,9 +1008,9 @@ function exportSpritesheet() {
 
   canvas.height = state.height * scale;
 
-  const ctx = canvas.getContext("2d");
+  const context = canvas.getContext("2d");
 
-  ctx.imageSmoothingEnabled = false;
+  context.imageSmoothingEnabled = false;
 
   state.frames.forEach((frame, frameIndex) => {
     frame.forEach((color, index) => {
@@ -921,11 +1018,13 @@ function exportSpritesheet() {
         return;
       }
 
-      const { x, y } = getCoordinates(index);
+      const x = index % state.width;
 
-      ctx.fillStyle = color;
+      const y = Math.floor(index / state.width);
 
-      ctx.fillRect(
+      context.fillStyle = color;
+
+      context.fillRect(
         (frameIndex * state.width + x) * scale,
 
         y * scale,
@@ -936,33 +1035,61 @@ function exportSpritesheet() {
     });
   });
 
-  downloadCanvas(canvas, `${state.projectName}-spritesheet.png`);
+  downloadCanvas(canvas, `${slugify(state.projectName)}-spritesheet.png`);
 
   showToast("Spritesheet exported");
 }
 
-/*PROJECT EXPORT*/
+function downloadCanvas(canvas, filename) {
+  const link = document.createElement("a");
 
-function getProjectData() {
-  return {
-    format: "-pixel-art",
-    version: 2,
+  link.download = filename;
+
+  link.href = canvas.toDataURL("image/png");
+
+  link.click();
+}
+
+/* =========================================================
+   PROJECT EXPORT
+   ========================================================= */
+
+function bindProjectControls() {
+  $("#projectName").addEventListener("input", (event) => {
+    state.projectName = event.target.value || "my-pixel-sprite";
+
+    updateAnimationStyle();
+
+    autosave();
+  });
+
+  $("#exportProjectBtn").addEventListener("click", exportProject);
+
+  $("#importProjectBtn").addEventListener("click", () => {
+    $("#projectFile").click();
+  });
+
+  $("#projectFile").addEventListener("change", importProject);
+}
+
+function exportProject() {
+  const project = {
+    version: 1,
 
     name: state.projectName,
 
     width: state.width,
+
     height: state.height,
 
     fps: state.fps,
 
-    frames: cloneFrames(state.frames),
+    frames: state.frames,
+
+    activeFrameIndex: state.activeFrameIndex,
   };
-}
 
-function exportProject() {
-  const data = JSON.stringify(getProjectData(), null, 2);
-
-  const blob = new Blob([data], {
+  const blob = new Blob([JSON.stringify(project, null, 2)], {
     type: "application/json",
   });
 
@@ -972,7 +1099,7 @@ function exportProject() {
 
   link.href = url;
 
-  link.download = `${state.projectName || "pixel-project"}.json`;
+  link.download = `${slugify(state.projectName)}.json`;
 
   link.click();
 
@@ -981,193 +1108,397 @@ function exportProject() {
   showToast("Project exported");
 }
 
-function importProject(file) {
-  const reader = new FileReader();
+async function importProject(event) {
+  const file = event.target.files[0];
 
-  reader.onload = (event) => {
-    try {
-      const data = JSON.parse(event.target.result);
+  if (!file) {
+    return;
+  }
 
-      if (data.format !== "-pixel-art") {
-        throw new Error("Invalid project format");
-      }
+  try {
+    const text = await file.text();
 
-      if (
-        !Number.isInteger(data.width) ||
-        !Number.isInteger(data.height) ||
-        !Array.isArray(data.frames)
-      ) {
-        throw new Error("Incomplete project");
-      }
+    const project = JSON.parse(text);
 
-      const expectedLength = data.width * data.height;
+    validateProject(project);
 
-      const validFrames = data.frames.every(
-        (frame) => Array.isArray(frame) && frame.length === expectedLength,
-      );
+    pushHistory();
 
-      if (!validFrames) {
-        throw new Error("Invalid frame data");
-      }
+    state.projectName = project.name || "my-pixel-sprite";
 
-      pushHistory();
+    state.width = project.width;
 
-      state.width = data.width;
+    state.height = project.height;
 
-      state.height = data.height;
+    state.fps = project.fps || 8;
 
-      state.frames = data.frames.map((frame) => [...frame]);
+    state.frames = project.frames;
 
-      state.fps = Number(data.fps) || CONFIG.DEFAULT_FPS;
+    state.activeFrameIndex = Math.min(
+      project.activeFrameIndex || 0,
+      state.frames.length - 1,
+    );
 
-      state.activeFrame = 0;
+    state.tool = "paint";
 
-      state.projectName = data.name || "imported-sprite";
+    state.symmetry = "off";
 
-      projectNameInput.value = state.projectName;
+    $("#projectFile").value = "";
 
-      fpsRange.value = state.fps;
+    showToast("Project imported");
 
-      renderEverything();
+    renderAll();
 
-      saveToLocalStorage();
+    autosave();
+  } catch (error) {
+    console.error(error);
 
-      showToast("Project imported successfully");
-    } catch (error) {
-      console.error(error);
-
-      showToast("Could not import that project");
-    }
-  };
-
-  reader.readAsText(file);
+    showToast("That JSON file is not a valid Sprite Sprout project");
+  }
 }
 
-/*LOCAL STORAGE*/
+function validateProject(project) {
+  if (
+    !project ||
+    !Number.isInteger(project.width) ||
+    !Number.isInteger(project.height) ||
+    !Array.isArray(project.frames) ||
+    project.width < 1 ||
+    project.height < 1 ||
+    project.frames.length < 1
+  ) {
+    throw new Error("Invalid project");
+  }
 
-function saveToLocalStorage() {
-  const data = {
-    format: "-pixel-art",
-    version: 2,
+  const expected = project.width * project.height;
 
-    name: state.projectName,
+  project.frames.forEach((frame) => {
+    if (!Array.isArray(frame) || frame.length !== expected) {
+      throw new Error("Invalid frame");
+    }
+  });
+}
 
+/* =========================================================
+   AUTOSAVE
+   ========================================================= */
+
+function autosave() {
+  try {
+    const project = {
+      version: 1,
+
+      name: state.projectName,
+
+      width: state.width,
+
+      height: state.height,
+
+      fps: state.fps,
+
+      frames: state.frames,
+
+      activeFrameIndex: state.activeFrameIndex,
+    };
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+
+    updateSaveStatus();
+  } catch (error) {
+    console.warn("Autosave failed:", error);
+  }
+}
+
+function restoreAutosave() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+
+    if (!saved) {
+      return;
+    }
+
+    const project = JSON.parse(saved);
+
+    validateProject(project);
+
+    state.projectName = project.name || "my-pixel-sprite";
+
+    state.width = project.width;
+
+    state.height = project.height;
+
+    state.fps = project.fps || 8;
+
+    state.frames = project.frames;
+
+    state.activeFrameIndex = Math.min(
+      project.activeFrameIndex || 0,
+      state.frames.length - 1,
+    );
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+}
+
+function updateSaveStatus() {
+  const status = $("#saveStatus");
+
+  status.innerHTML = `
+    <span class="save-dot"></span>
+    <span>Autosaved</span>
+  `;
+}
+
+/* =========================================================
+   UNDO / REDO
+   ========================================================= */
+
+function makeSnapshot() {
+  return {
     width: state.width,
+
     height: state.height,
 
     fps: state.fps,
 
-    frames: cloneFrames(state.frames),
+    frames: clone(state.frames),
 
-    recentColors: state.recentColors,
+    activeFrameIndex: state.activeFrameIndex,
+
+    projectName: state.projectName,
   };
-
-  try {
-    localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(data));
-
-    $("#saveBtn").textContent = "Saved ✓";
-  } catch (error) {
-    console.warn("Could not save project", error);
-
-    $("#saveBtn").textContent = "Save unavailable";
-  }
 }
 
-function loadFromLocalStorage() {
-  try {
-    const raw = localStorage.getItem(CONFIG.STORAGE_KEY);
+function restoreSnapshot(snapshot) {
+  state.width = snapshot.width;
 
-    if (!raw) {
-      return false;
-    }
+  state.height = snapshot.height;
 
-    const data = JSON.parse(raw);
+  state.fps = snapshot.fps;
 
-    if (data.format !== "-pixel-art") {
-      return false;
-    }
+  state.frames = clone(snapshot.frames);
 
-    state.width = Number(data.width) || CONFIG.DEFAULT_SIZE;
+  state.activeFrameIndex = snapshot.activeFrameIndex;
 
-    state.height = Number(data.height) || CONFIG.DEFAULT_SIZE;
+  state.projectName = snapshot.projectName;
 
-    state.fps = Number(data.fps) || CONFIG.DEFAULT_FPS;
+  renderAll();
 
-    state.frames =
-      Array.isArray(data.frames) && data.frames.length
-        ? data.frames.map((frame) => [...frame])
-        : [createBlankFrame(state.width, state.height)];
-
-    state.projectName = data.name || "my-pixel-sprite";
-
-    state.recentColors = Array.isArray(data.recentColors)
-      ? data.recentColors
-      : [];
-
-    state.activeFrame = 0;
-
-    projectNameInput.value = state.projectName;
-
-    fpsRange.value = state.fps;
-
-    return true;
-  } catch (error) {
-    console.warn("Could not restore project", error);
-
-    return false;
-  }
+  autosave();
 }
 
-/*COPY CSS*/
+function pushHistory() {
+  state.history.push(makeSnapshot());
 
-async function copyCSS() {
-  const css = compileCSS();
-
-  cssOutput.value = css;
-
-  try {
-    await navigator.clipboard.writeText(css);
-
-    showToast("CSS copied to clipboard");
-  } catch (error) {
-    cssOutput.focus();
-    cssOutput.select();
-
-    try {
-      document.execCommand("copy");
-
-      showToast("CSS copied to clipboard");
-    } catch {
-      showToast("Select the CSS manually");
-    }
+  if (state.history.length > 50) {
+    state.history.shift();
   }
+
+  state.redoStack = [];
 }
 
-/*MODAL*/
+function undo() {
+  if (!state.history.length) {
+    showToast("Nothing to undo");
 
-let modalConfirmAction = null;
+    return;
+  }
 
-function openConfirm(title, text, action) {
+  state.redoStack.push(makeSnapshot());
+
+  const snapshot = state.history.pop();
+
+  restoreSnapshot(snapshot);
+
+  showToast("Undone");
+}
+
+function redo() {
+  if (!state.redoStack.length) {
+    showToast("Nothing to redo");
+
+    return;
+  }
+
+  state.history.push(makeSnapshot());
+
+  const snapshot = state.redoStack.pop();
+
+  restoreSnapshot(snapshot);
+
+  showToast("Redone");
+}
+
+/* =========================================================
+   KEYBOARD SHORTCUTS
+   ========================================================= */
+
+function bindKeyboardShortcuts() {
+  document.addEventListener("keydown", (event) => {
+    const target = event.target;
+
+    const typing = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+
+    if (typing && !(event.ctrlKey || event.metaKey)) {
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+
+      if (event.shiftKey) {
+        redo();
+      } else {
+        undo();
+      }
+
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+      event.preventDefault();
+
+      redo();
+
+      return;
+    }
+
+    if (typing) {
+      return;
+    }
+
+    switch (event.key.toLowerCase()) {
+      case "p":
+        state.tool = "paint";
+
+        syncToolbar();
+
+        break;
+
+      case "e":
+        state.tool = "erase";
+
+        syncToolbar();
+
+        break;
+
+      case "o":
+        state.onionSkin = !state.onionSkin;
+
+        syncToolbar();
+
+        renderGrid();
+
+        break;
+
+      case " ":
+        event.preventDefault();
+
+        togglePlayback();
+
+        break;
+    }
+  });
+}
+
+/* =========================================================
+   RENDER ALL
+   ========================================================= */
+
+function renderAll() {
+  renderGrid();
+
+  renderTimeline();
+
+  renderPreview();
+
+  syncToolbar();
+
+  syncSymmetry();
+
+  syncScaleButtons();
+
+  syncPlayButton();
+
+  updateFPS();
+
+  updateProjectUI();
+
+  updateMeta();
+}
+
+function updateProjectUI() {
+  $("#projectName").value = state.projectName;
+
+  $$(".size-btn").forEach((button) => {
+    button.classList.toggle(
+      "active",
+      Number(button.dataset.size) === state.width,
+    );
+  });
+
+  $("#currentColor").textContent = state.color;
+
+  $("#colorPicker").value = state.color;
+}
+
+function updateMeta() {
+  $("#frameInfo").textContent = `Frame ${state.activeFrameIndex + 1} / ${
+    state.frames.length
+  } · ${state.width} × ${state.height}`;
+
+  $("#metaFrames").textContent = state.frames.length;
+
+  $("#metaCanvas").textContent = `${state.width}×${state.height}`;
+}
+
+/* =========================================================
+   CONFIRMATION MODAL
+   ========================================================= */
+
+let pendingConfirm = null;
+
+function confirmAction(title, text, callback) {
   $("#modalTitle").textContent = title;
 
   $("#modalText").textContent = text;
 
-  modalConfirmAction = action;
+  pendingConfirm = callback;
 
   $("#confirmModal").classList.add("open");
 }
 
-function closeConfirm() {
+$("#modalCancel").addEventListener("click", closeModal);
+
+$("#modalConfirm").addEventListener("click", () => {
+  if (pendingConfirm) {
+    pendingConfirm();
+  }
+
+  closeModal();
+});
+
+$("#confirmModal").addEventListener("click", (event) => {
+  if (event.target === $("#confirmModal")) {
+    closeModal();
+  }
+});
+
+function closeModal() {
   $("#confirmModal").classList.remove("open");
 
-  modalConfirmAction = null;
+  pendingConfirm = null;
 }
 
-/*TOAST*/
+/* =========================================================
+   TOAST
+   ========================================================= */
 
 let toastTimer = null;
 
 function showToast(message) {
+  const toast = $("#toast");
+
   toast.textContent = message;
 
   toast.classList.add("show");
@@ -1178,337 +1509,3 @@ function showToast(message) {
     toast.classList.remove("show");
   }, 1800);
 }
-
-/*RENDER EVERYTHING*/
-
-function renderEverything() {
-  renderGrid();
-
-  renderTimeline();
-
-  renderPalette();
-
-  renderPreview();
-
-  updateToolButtons();
-
-  updateFrameInfo();
-
-  updateHistoryButtons();
-
-  cssOutput.value = compileCSS();
-
-  fpsRange.value = state.fps;
-
-  fpsValue.textContent = `${state.fps} FPS`;
-
-  currentColor.textContent = state.color;
-
-  colorPicker.value = normalizeColorForInput(state.color);
-
-  projectNameInput.value = state.projectName;
-
-  $$(".size-btn").forEach((button) => {
-    button.classList.toggle(
-      "active",
-      Number(button.dataset.size) === state.width,
-    );
-  });
-
-  updateScale(state.previewScale);
-
-  setSymmetry(state.symmetry);
-}
-
-/*EVENT LISTENERS*/
-
-/* Drawing */
-
-pixelGrid.addEventListener("pointerdown", handlePointerDown);
-
-pixelGrid.addEventListener("pointermove", handlePointerMove);
-
-window.addEventListener("pointerup", endDrawing);
-
-/* Right click = erase */
-
-pixelGrid.addEventListener("contextmenu", (event) => {
-  event.preventDefault();
-
-  const cell = event.target.closest(".pixel");
-
-  if (!cell) {
-    return;
-  }
-
-  pushHistory();
-
-  const index = Number(cell.dataset.index);
-
-  const { x, y } = getCoordinates(index);
-
-  applySymmetry(x, y, null);
-
-  renderEverything();
-
-  saveToLocalStorage();
-});
-
-/* Tools */
-
-$("#paintBtn").addEventListener("click", () => setTool("paint"));
-
-$("#eraseBtn").addEventListener("click", () => setTool("erase"));
-
-$("#onionBtn").addEventListener("click", toggleOnionSkin);
-
-$("#symmetryBtn").addEventListener("click", cycleSymmetry);
-
-/* Symmetry */
-
-$("#symOffBtn").addEventListener("click", () => setSymmetry("off"));
-
-$("#symHorizontalBtn").addEventListener("click", () =>
-  setSymmetry("horizontal"),
-);
-
-$("#symVerticalBtn").addEventListener("click", () => setSymmetry("vertical"));
-
-$("#symBothBtn").addEventListener("click", () => setSymmetry("both"));
-
-/* Colors */
-
-colorPicker.addEventListener("input", (event) => {
-  setColor(event.target.value);
-});
-
-/* Canvas size */
-
-$$(".size-btn").forEach((button) => {
-  button.addEventListener("click", () => {
-    resizeCanvas(Number(button.dataset.size));
-  });
-});
-
-/* History */
-
-$("#undoBtn").addEventListener("click", undo);
-
-$("#redoBtn").addEventListener("click", redo);
-
-/* Clear */
-
-$("#clearFrameBtn").addEventListener("click", () => {
-  openConfirm(
-    "Clear this frame?",
-    "Every pixel in the current frame will be removed.",
-    clearCurrentFrame,
-  );
-});
-
-$("#clearAllBtn").addEventListener("click", () => {
-  openConfirm(
-    "Clear every frame?",
-    "Every frame will become blank. Your current project will remain otherwise unchanged.",
-    clearAllFrames,
-  );
-});
-
-/* Timeline */
-
-$("#addFrameBtn").addEventListener("click", addFrame);
-
-$("#duplicateFrameBtn").addEventListener("click", duplicateFrame);
-
-$("#deleteFrameBtn").addEventListener("click", deleteFrame);
-
-$("#moveLeftBtn").addEventListener("click", () => moveFrame(-1));
-
-$("#moveRightBtn").addEventListener("click", () => moveFrame(1));
-
-/* Preview */
-
-$("#playBtn").addEventListener("click", togglePlayback);
-
-fpsRange.addEventListener("input", (event) => {
-  updateFPS(event.target.value);
-});
-
-$$(".scale-btn").forEach((button) => {
-  button.addEventListener("click", () => {
-    updateScale(button.dataset.scale);
-  });
-});
-
-/* Export */
-
-$("#copyCSSBtn").addEventListener("click", copyCSS);
-
-$("#refreshCSSBtn").addEventListener("click", () => {
-  cssOutput.value = compileCSS();
-
-  injectAnimationCSS();
-
-  showToast("CSS recompiled");
-});
-
-$("#exportFrameBtn").addEventListener("click", exportCurrentFrame);
-
-$("#exportSheetBtn").addEventListener("click", exportSpritesheet);
-
-/* Project */
-
-projectNameInput.addEventListener("input", (event) => {
-  state.projectName = event.target.value || "my-pixel-sprite";
-
-  saveToLocalStorage();
-});
-
-$("#exportProjectBtn").addEventListener("click", exportProject);
-
-$("#importProjectBtn").addEventListener("click", () => {
-  $("#projectFile").click();
-});
-
-$("#projectFile").addEventListener("change", (event) => {
-  const file = event.target.files[0];
-
-  if (file) {
-    importProject(file);
-  }
-
-  event.target.value = "";
-});
-
-/* Modal */
-
-$("#modalCancel").addEventListener("click", closeConfirm);
-
-$("#modalConfirm").addEventListener("click", () => {
-  if (typeof modalConfirmAction === "function") {
-    modalConfirmAction();
-  }
-
-  closeConfirm();
-});
-
-$("#confirmModal").addEventListener("click", (event) => {
-  if (event.target === $("#confirmModal")) {
-    closeConfirm();
-  }
-});
-
-/*KEYBOARD SHORTCUTS*/
-
-document.addEventListener("keydown", (event) => {
-  /*
-   * Don't steal shortcuts while typing.
-   */
-  const tag = event.target.tagName;
-
-  const isTyping = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-
-  if (isTyping) {
-    return;
-  }
-
-  /* Undo */
-
-  if (event.ctrlKey && event.key.toLowerCase() === "z") {
-    event.preventDefault();
-
-    if (event.shiftKey) {
-      redo();
-    } else {
-      undo();
-    }
-
-    return;
-  }
-
-  /* Redo */
-
-  if (event.ctrlKey && event.key.toLowerCase() === "y") {
-    event.preventDefault();
-
-    redo();
-
-    return;
-  }
-
-  /* Paint */
-
-  if (event.key.toLowerCase() === "p") {
-    setTool("paint");
-
-    return;
-  }
-
-  /* Eraser */
-
-  if (event.key.toLowerCase() === "e") {
-    setTool("erase");
-
-    return;
-  }
-
-  /* Onion */
-
-  if (event.key.toLowerCase() === "o") {
-    toggleOnionSkin();
-
-    return;
-  }
-
-  /* Duplicate */
-
-  if (event.key.toLowerCase() === "d") {
-    duplicateFrame();
-
-    return;
-  }
-
-  /* Play */
-
-  if (event.code === "Space") {
-    event.preventDefault();
-
-    togglePlayback();
-
-    return;
-  }
-
-  /* Previous frame */
-
-  if (event.key === "ArrowLeft") {
-    event.preventDefault();
-
-    selectFrame(state.activeFrame - 1);
-
-    return;
-  }
-
-  /* Next frame */
-
-  if (event.key === "ArrowRight") {
-    event.preventDefault();
-
-    selectFrame(state.activeFrame + 1);
-
-    return;
-  }
-});
-
-/*INITIALIZATION*/
-
-const restored = loadFromLocalStorage();
-
-if (!restored) {
-  state.history = [snapshot()];
-
-  state.historyIndex = 0;
-}
-
-renderEverything();
-
-showToast(restored ? "Restored your last project" : "Ready to draw");
